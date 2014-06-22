@@ -1,0 +1,381 @@
+---
+
+
+---
+# Human Activity Recognition Devices Predict Correct Usage of Exerciser Equipment.                                                           
+
+                                                                                                                 
+## Summary
+Data [1] was use to evaluate accelerometer data from individuals performing 5 exercises either correctly of incorrectly.  A training set was used to evaluate several machine learning models were to determine which one(s) give the best fit with the training set.  A test set, which had been set aside, was then used to predict results based on the training set fit.
+
+## Data Processing
+#### R packages were loaded and cores were selected for parallel computing.
+```{r}
+
+library(caret)
+library(rattle)
+library(plyr)
+library(doParallel)
+registerDoParallel(cores=4)
+```
+
+#### Data was loaded from the R directory.   
+
+```{r}
+trainingSet <- read.csv("pml-training.csv", sep = ",")
+testingSet <- read.csv("pml-testing.csv", sep = ",")
+dim(testingSet); dim(trainingSet)
+```
+
+#### All variables that missing data are remove from training and test data sets.
+```{r}
+train1<-trainingSet[ , apply(trainingSet, 2, function(x) !any(is.na(x)))]
+newTest<-testingSet[ , apply(testingSet, 2, function(x) !any(is.na(x)))]
+diff<-!(colnames(train1) %in% colnames(newTest))
+d<-diff[-93]
+newTrain<-train1[c(-which(d))]
+#### This shows that all variables in newTrain and newTest are the same except the activity factor.  Thus the variables are the same except for the 60th variable.
+which(!(colnames(newTrain) %in% colnames(newTest)))
+```
+#### Partitioning of training data.     
+The newTrain data set is further split to give another "train" and "test" set for further model evaluation without using the assigned newTest data set.
+```{r}
+inTrain = createDataPartition(y=newTrain$classe, p = 0.75, list=FALSE)
+train = newTrain[ inTrain,]
+test = newTrain[-inTrain,]
+```
+
+#### Create a tree of accelerometer data from a 59 variable subset of data.
+```{r, fig.width=7,fig.height=7}
+ptm <- proc.time()
+modFit <- train(classe ~ ., method="rpart", data=train)
+print(modFit$finalModel)
+par(mar=c(0,2,9,2))
+fancyRpartPlot(modFit$finalModel, main="Figure 1.  Exploratory tree of the activity train data set.")
+proc.time() - ptm
+```
+#### The rainy forest model (rf) was evaluated the train and test data sets.
+```{r,cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit <- train(classe ~ ., data=train, method="rf", trControl = cvCtrl)
+modFit
+svmPredict<-predict(modFit, newdata = test[,-60])
+confusionMatrix(svmPredict, test[,60])
+proc.time() - ptm
+```
+#### The generalized boosted regression model (gbm) was was evaluated the train and test data sets.   
+This model was modified from an example presented by Max Kuhn[2], the author of the caret package. 
+
+```{r, fig.width=8,fig.height=6}
+ptm <- proc.time()
+set.seed(5656)
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit1 <- train(classe~., data=train, method="gbm", trControl = cvCtrl)
+trellis.par.set(caretTheme())
+plot(modFit1, main="Figure 2.  Cross validation of gbm showing accuracy.")
+trellis.par.set(caretTheme())
+plot(modFit1, metric = "Kappa", main="Figure 3.  Cross validation of gbm showing kappa values.")
+modFit1
+gbmPredict<-predict(modFit1, newdata = test[,-60])
+confusionMatrix(gbmPredict, test[,60])
+proc.time() - ptm
+```
+
+
+### Support vector machine linear (svmLinear) of 59 variable subsets.
+
+```{r,cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit2 <- train(classe ~ ., data=train, method="svmLinear", trControl = cvCtrl)
+modFit2
+svmPredict<-predict(modFit2, newdata = test[,-60])
+confusionMatrix(svmPredict, test[,60])
+proc.time() - ptm
+```
+
+### Further reduction of data size based on correlation threshold.
+#### Returns 55 variables in the data frame entitled trainSub95.
+```{r, cache=TRUE}
+ptm <- proc.time()
+M <- abs(cor(train[c(7:59)]))
+diag(M) <- 0
+sub95<-which(M > 0.95,arr.ind=T)
+trainSub95 <- train[,-sub95]
+testSub95 <- test[,-sub95]
+dim(trainSub95)
+# Shows the index of the 7 variables that have been removed and that the number of variables in the train and test set are the same.
+which(!(colnames(train) %in% colnames(trainSub95)))
+which(!(colnames(trainSub95) %in% colnames(testSub95)))
+proc.time() - ptm
+```
+
+### Returns 42 variables in the data frame entitled trainSub80.
+```{r, cache=TRUE}
+ptm <- proc.time()
+M <- abs(cor(train[c(7:59)]))
+diag(M) <- 0
+sub80 <- which(M > 0.80,arr.ind=T)
+trainSub80 <- train[,-sub80]
+testSub80 <- test[,-sub80]
+dim(trainSub80)
+# Shows the index of the 7 variables that have been removed and that the number of variables in the train and test set are the same.
+which(!(colnames(train) %in% colnames(trainSub80)))
+which(!(colnames(trainSub80) %in% colnames(testSub80)))
+proc.time() - ptm
+```
+
+### Returns 28 variables in the data frame entitled trainSub70.
+```{r, cache=TRUE}
+ptm <- proc.time()
+M <- abs(cor(train[c(7:59)]))
+diag(M) <- 0
+sub70 <- which(M > 0.70,arr.ind=T)
+trainSub70 <- train[,-sub70]
+testSub70 <- test[,-sub70]
+dim(trainSub70)
+# Shows the index of the 7 variables that have been removed and that the number of variables in the train and test set are the same.
+which(!(colnames(train) %in% colnames(trainSub70)))
+which(!(colnames(trainSub70) %in% colnames(testSub70)))
+proc.time() - ptm
+```
+### Returns 21 variables in the data frame entitled trainSub60.
+```{r, cache=TRUE}
+ptm <- proc.time()
+M <- abs(cor(train[c(7:59)]))
+diag(M) <- 0
+sub60 <- which(M > 0.60,arr.ind=T)
+trainSub60 <- train[,-sub60]
+testSub60 <- test[,-sub60]
+dim(trainSub60)
+# Shows the index of the 7 variables that have been removed and that the number of variables in the train and test set are the same.
+which(!(colnames(train) %in% colnames(trainSub60)))
+which(!(colnames(trainSub60) %in% colnames(testSub60)))
+proc.time() - ptm
+```
+### Returns 15 variables in the data frame entitled trainSub50.
+```{r, cache=TRUE}
+ptm <- proc.time()
+M <- abs(cor(train[c(7:59)]))
+diag(M) <- 0
+sub50 <- which(M > 0.50,arr.ind=T)
+trainSub50 <- train[,-sub50]
+testSub50 <- test[,-sub50]
+newTrainSub50 <- newTrain[,-sub50]
+newTestSub50 <- newTest[,-sub50]
+dim(trainSub50)
+dim(newTrainSub50)
+# Shows the index of the 7 variables that have been removed and that the number of variables in the train and test set are the same.
+which(!(colnames(train) %in% colnames(trainSub50)))
+which(!(colnames(trainSub50) %in% colnames(testSub50)))
+proc.time() - ptm
+```
+
+### Returns 15 variables in the data frame entitled trainSub40.
+```{r, cache=TRUE}
+ptm <- proc.time()
+M <- abs(cor(train[c(7:59)]))
+diag(M) <- 0
+sub40 <- which(M > 0.40,arr.ind=T)
+trainSub40 <- train[,-sub40]
+testSub40 <- test[,-sub40]
+newTrainSub40 <- newTrain[,-sub40]
+newTestSub40 <- newTest[,-sub40]
+dim(trainSub40)
+dim(newTrainSub40)
+# Shows the index of the 7 variables that have been removed and that the number of variables in the train and test set are the same.
+which(!(colnames(train) %in% colnames(trainSub40)))
+which(!(colnames(trainSub40) %in% colnames(testSub40)))
+proc.time() - ptm
+names(trainSub40)
+```
+
+### svmLinear with trainSub95 with variables that had less than 95% correlation.
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit4 <- train(classe ~ ., data=trainSub95, method="svmLinear", trControl = cvCtrl)
+modFit4
+svmPredict1 <- predict(modFit4, newdata = testSub95[,-55])
+confusionMatrix(svmPredict1, testSub95[,55])
+proc.time() - ptm
+```
+### svmLinear with trainSub80 with variables that had less than 80% correlation.
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit5 <- train(classe ~ ., data=trainSub80, method="svmLinear", trControl = cvCtrl)
+modFit5
+svmPredict2 <- predict(modFit5, newdata = testSub80[,-42])
+confusionMatrix(svmPredict2, testSub80[,42])
+proc.time() - ptm
+```
+### svmLinear with trainSub70 with variables that had less than 70% correlation.
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit70 <- train(classe ~ ., data=trainSub70, method="svmLinear", trControl = cvCtrl)
+modFit70
+svmPredict70 <- predict(modFit70, newdata = testSub70[,-28])
+confusionMatrix(svmPredict70, testSub70[,28])
+proc.time() - ptm
+```
+### svmLinear with trainSub60 with variables that had less than 60% correlation.
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit60 <- train(classe ~ ., data=trainSub60, method="svmLinear", trControl = cvCtrl)
+modFit60
+svmPredict60 <- predict(modFit60, newdata = testSub60[,-21])
+confusionMatrix(svmPredict60, testSub60[,21])
+proc.time() - ptm
+```
+### svmLinear with trainSub50 with variables that had less than 50% correlation.
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit50 <- train(classe ~ ., data=trainSub50, method="svmLinear", trControl = cvCtrl)
+modFit50
+svmPredict50 <- predict(modFit50, newdata = testSub50[,-15])
+confusionMatrix(svmPredict50, testSub50[,15])
+proc.time() - ptm
+```
+
+### svmLinear with trainSub40 with variables that had less than 40% correlation.
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit40 <- train(classe ~ ., data=trainSub40, method="svmLinear", trControl = cvCtrl)
+modFit40
+svmPredict40 <- predict(modFit40, newdata = testSub40[,-10])
+confusionMatrix(svmPredict40, testSub40[,10])
+proc.time() - ptm
+```
+### Select top 20 highest performing variables from modFit3.
+```{r, cache=TRUE}
+top20Train <- train[c(7,18,19,21,27,30,31,32,34,40:45,47,53,56,57,59,60)]
+length(train[c(7,18,19,21,27,30,31,32,34,40:45,47,53,56,57,59,60)])
+names(top20Train)
+top20test <- test[c(7,18,19,21,27,30,31,32,34,40:45,47,53,56,57,59,60)]
+```
+
+
+### svmLinear with the top 20 preformers variables from modFit3.
+```{r,cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit6 <- train(classe ~ ., data=top20Train, method="svmLinear", trControl = cvCtrl)
+modFit6
+svmPredict3<-predict(modFit6, newdata = top20test[,-21])
+confusionMatrix(svmPredict3, top20test[,21])
+proc.time() - ptm
+```
+
+### Random forest (rf) with variables that had less than 80% correlation.
+```{r,cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit7 <- train(classe ~ ., data=trainSub80, method="rf", trControl = cvCtrl)
+modFit7
+rfPredict2 <- predict(modFit7, newdata = testSub80[,-42])
+confusionMatrix(rfPredict2, testSub80[,42])
+proc.time() - ptm
+```
+
+### Linear discriminant analysis (lda) and naive bayes (nb) with 60 variable data set.      
+```{r, cache=TRUE, warning=FALSE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+ldaModel<-train(classe~., data=train, method="lda", trControl = cvCtrl)
+ldaModel
+ldaPredict <- predict(ldaModel, newdata = test[,-60])
+confusionMatrix(ldaPredict, test[,60])
+proc.time() - ptm
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+nbModel<-train(classe~., data=train, method="nb", trControl = cvCtrl)
+nbModel
+nbPredict <- predict(nbModel, newdata = test[,-60])
+confusionMatrix(nbPredict, test[,60])
+proc.time() - ptm
+```
+
+
+## Results                         
+Although many of the models that processed the training data gave good predictions, exploratory tree building, shown in Figure 1, suggested that this probably was a poor model to pursue.  Therefore, further tree building was discontinued.
+
+As shown in the data processing section above, many of the models had low in sample error.  However, this might be expected if the models were tuning on the noise rather than the true signal generated when using the exercise equipment and sensors.  Therefore, a subset of the original training data was partitioned into a train set that was used for estimating the in sample error and a test subset used both for validation and for estimation of the out of sample error.  As shown in Figures 2 and 3 (data processing section), cross-validation with gbm gave high accuracy and kappa values.  This was also observed with most of the other models tested.  However, most models had long processing times.  The most extreme example of this was the gbm with a process time of about 2.8 minutes (Table 1, results section). In contrast, the svmLinear model had much shorter processing times that could be measured in seconds rather than minutes (Table 1, results).  Since svmLinear gave excellent in sample error, out of sample error, and processing time (Table 1, results), smaller and smaller data sets were evaluated with the svmLinear model.  The variables were chosen based of correlation thresholds from 0.4-0.95 (shown in data process section).  Even with a threshold of M > 0.40, which resulted in a 10 variable data set, the in sample error gave accuracy and kappa values equal to 1 and the out of sample error gave accuracy of 0.98 (Table 1, results).  Finally, the original newTrain and newTest were evaluated by gbm, rf, and three svmLinear models with 60, 15, or 10 variables.  All 5 models gave the same answer: **20 A's** as the activity category.  It is now clear that this is not the intended result and it remains a mystery as to why all the models appear to be running flawlessly with train and test subsets that were created from the original pml-training set and why these apparently erroneous results were obtained with the newTest data set.               
+### The svmLinear model from the caret package with 60 variables.  Calculations were preformed with assigned newTrain and newTest data sets.           
+### Gbm prediction of newTest activity from newTrain activty.      
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFitGbm <- train(classe~., data=newTrain, method="gbm", trControl = cvCtrl)
+gbmPredict2<-predict(modFitGbm, newdata = newTest)
+gbmPredict2
+proc.time() - ptm
+```
+
+### SvmLinear prediction of newTest activity from newTrain activty.
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit3 <- train(classe ~ ., data=newTrain, method="svmLinear", trControl = cvCtrl)
+modFit3
+svmPredict<-predict(modFit3, newdata = newTest)
+svmPredict
+proc.time() - ptm
+```
+### Rf prediction of newTest activity from newTrain activty.
+```{r,cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit <- train(classe ~ ., data=newTrain, method="rf", trControl = cvCtrl)
+modFit
+rfPredict<-predict(modFit, newdata = newTest)
+# Compare rf and svmLinear in atable format.
+table(svmPredict, rfPredict)
+proc.time() - ptm
+```
+### SvmLinear prediction of newTest activity from newTrain activty with 15 varialbes.
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit50a <- train(classe ~ ., data=newTrainSub50, method="svmLinear", trControl = cvCtrl)
+modFit50a
+svmPredict50 <- predict(modFit50a, newdata = newTestSub50)
+svmPredict50
+proc.time() - ptm
+```
+
+### SvmLinear prediction of newTest activity from newTrain activty with 10 varialbes.
+```{r, cache=TRUE}
+ptm <- proc.time()
+cvCtrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 1)
+modFit40a <- train(classe ~ ., data=newTrainSub40, method="svmLinear", trControl = cvCtrl)
+modFit40a
+svmPredict40 <- predict(modFit40a, newdata = newTestSub40)
+svmPredict40
+proc.time() - ptm
+```
+## Table.  Comparison of predition models*. 
+```{r}
+time <- matrix(c(210,227,21,200,200,40,14,9,6,5,23,93,158, 
+                 1,1,1,1,1,1,1,1,1,1,1,.6,1, 
+                 1,1,1,1,1,1,1,1,1,1,1,.5,1, 
+                 1,1,1,1,.91,1,1,1,1,.98,.98,.58,1), ncol=4)
+colnames(time) <- c("Time (sec)", "Accuracy (ISE)", "Kappa (ISE)", "Accuracy (OSE)")
+Model <- c("rf", "gbm", "svmLinear", "lda", "nb", "svmLinear95", "svmLinear80", "svmLinear70",
+                   "svmLinear60", "svmLinear50", "svmLinear40", "svmLinearTop20", "rf80")
+time <- as.table(time)
+print(cbind(Model,time), quote=F)
+```
+* The elapse time, the in sample error (ISE), and the out of sample error (OSE), of 13 different models is compared.            
+
+## Conclusion                                                      
+Data from activity detectors were evaluated by employing several different predictive models, including support vector machine linear model (svmLinear), random forest (rf), generalized boosted regression model (gbm), linear discriminant analysis (lda), and  naive bayes (nb).  Most of these models were highly accurate and cross validation generally gave high accuracy and kappa values.  Likewise, the models demonstrated that they were able to predicted the exercise category for a test subset, which was derived from the original pml-training data. As shown in Table 1 most of the models display little or no out of sample error.  Although kappa and accuracy values were high for all models, the real difference came from variations in the processing time.  In this regard the svmLinear model proved to be highly accurate, successfully cross validated and fast. Processing time was also improved by using parallel computing, which shortened the processing time by about 50%.  Methods were used to further reduce the number of variables for the purpose of reducing the processing time. As shown in Table 1, svmLinear50 had a process time of about 5 sec and in sample error accuracy and kappa values of 1 and out of sample error accuracy of 0.98. 
+## Reference              
+1.  Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+2.  Kuhn, Max.  Predictive Modeling with R and the caret Package.  http://www.edii.uclm.es/~useR-2013/Tutorials/kuhn/user_caret_2up.pdf, 2013.
+3.  Kuhn, Max.  A Short Introduction to the caret Package.  http://cran.r-project.org/web/packages/caret/vignettes/caret.pdf, 2014.  
